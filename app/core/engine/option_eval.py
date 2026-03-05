@@ -117,9 +117,58 @@ def _eval_template_c(
         )
         if leg1:
             legs.append(leg1)
-    
-    # Leg2, Leg3, Leg4, Leg5 类似...
-    # 简化版：这里只实现 Leg1 作为示例
+
+    # Leg2: +Put (mid DTE buy, 买入保护)
+    cfg2 = config.tmpl_c_leg2_mid_buy
+    if cfg2.enabled:
+        leg2 = _find_option_leg(
+            data_store, sim_date, spot_price,
+            option_type='P',
+            delta_range=(cfg2.delta_min, cfg2.delta_max) if cfg2.delta_min else (-0.45, -0.40),
+            dte_range=(cfg2.dte_min, cfg2.dte_max) if cfg2.dte_min else (20, 30),
+            pos=1
+        )
+        if leg2:
+            legs.append(leg2)
+
+    # Leg3: -Put (mid DTE sell, 卖出收入)
+    cfg3 = config.tmpl_c_leg3_mid_sell
+    if cfg3.enabled:
+        leg3 = _find_option_leg(
+            data_store, sim_date, spot_price,
+            option_type='P',
+            delta_range=(cfg3.delta_min, cfg3.delta_max) if cfg3.delta_min else (-0.20, -0.15),
+            dte_range=(cfg3.dte_min, cfg3.dte_max) if cfg3.dte_min else (150, 210),
+            pos=-1
+        )
+        if leg3:
+            legs.append(leg3)
+
+    # Leg4: +Put (far DTE buy, 远期保护)
+    cfg4 = config.tmpl_c_leg4_far_buy
+    if cfg4.enabled:
+        leg4 = _find_option_leg(
+            data_store, sim_date, spot_price,
+            option_type='P',
+            delta_range=(cfg4.delta_min, cfg4.delta_max) if cfg4.delta_min else (-0.35, -0.25),
+            dte_range=(cfg4.dte_min, cfg4.dte_max) if cfg4.dte_min else (30, 45),
+            pos=1
+        )
+        if leg4:
+            legs.append(leg4)
+
+    # Leg5: -Put (far DTE sell, 远期卖出收入)
+    cfg5 = config.tmpl_c_leg5_far_sell
+    if cfg5.enabled:
+        leg5 = _find_option_leg(
+            data_store, sim_date, spot_price,
+            option_type='P',
+            delta_range=(cfg5.delta_min, cfg5.delta_max) if cfg5.delta_min else (-0.15, -0.10),
+            dte_range=(cfg5.dte_min, cfg5.dte_max) if cfg5.dte_min else (150, 210),
+            pos=-1
+        )
+        if leg5:
+            legs.append(leg5)
     
     if len(legs) < 3:  # 至少需要3条腿
         return None
@@ -199,18 +248,20 @@ def _find_option_leg(
     candidates['dist_from_atm'] = abs(candidates['strike'] - spot_price)
     best = candidates.loc[candidates['dist_from_atm'].idxmin()]
     
+    # Parquet columns: 'mark' (mid price), 'implied_volatility', 'type' ('call'/'put')
+    mid_price = float(best.get('mark', best.get('mid', (best.get('bid', 0) + best.get('ask', 0)) / 2)))
     return {
         'type': option_type,
         'K': float(best['strike']),
         'T': int(best['dte']),
         'pos': pos,
-        'mid': float(best.get('mid', (best.get('bid', 0) + best.get('ask', 0)) / 2)),
+        'mid': mid_price,
         'bid': float(best.get('bid', 0)),
         'ask': float(best.get('ask', 0)),
         'delta': float(best.get('delta', 0)),
         'iv': float(best.get('implied_volatility', best.get('iv', 0.3))),
         'expiry': best['expiration'].strftime('%Y-%m-%d') if pd.notna(best['expiration']) else '',
-        'initial_price': float(best.get('mid', (best.get('bid', 0) + best.get('ask', 0)) / 2)),
+        'initial_price': mid_price,
     }
 
 

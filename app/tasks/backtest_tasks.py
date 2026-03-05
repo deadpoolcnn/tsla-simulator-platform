@@ -3,7 +3,8 @@
 """
 import json
 import logging
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timezone, date
 from pathlib import Path
 
 from app.celery_app import celery_app
@@ -15,6 +16,33 @@ from app.models.backtest import BacktestStatus
 import redis
 
 log = logging.getLogger(__name__)
+
+
+def _to_serializable(obj):
+    """
+    递归将对象转换为 JSON/PostgreSQL 可序列化的 Python 原生类型：
+    - date / datetime → ISO 字符串
+    - numpy 数值类型 → int / float
+    - nan / inf → None
+    - list / dict 递归处理
+    """
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: _to_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_serializable(v) for v in obj]
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        v = float(obj)
+        return None if (math.isnan(v) or math.isinf(v)) else v
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return _to_serializable(obj.tolist())
+    return obj
 
 
 @celery_app.task(bind=True, max_retries=3)
@@ -83,29 +111,44 @@ def run_backtest_task(self, backtest_id: str):
             progress_callback=publish_progress
         )
         
+        # 5. 序列化结果（date / numpy 类型 → Python 原生类型）
+        safe_equity_curve = _to_serializable(results['equity_curve'])
+        safe_total_return  = _to_serializable(results['total_return'])
+        safe_sharpe        = _to_serializable(results['sharpe_ratio'])
+        safe_drawdown      = _to_serializable(results['max_drawdown'])
+        safe_win_rate      = _to_serializable(results['win_rate'])
+
         # 5. 保存结果到数据库
         backtest.status = BacktestStatus.COMPLETED
         backtest.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        backtest.total_return = results['total_return']
-        backtest.sharpe_ratio = results['sharpe_ratio']
-        backtest.max_drawdown = results['max_drawdown']
-        backtest.win_rate = results['win_rate']
-        backtest.total_trades = results['total_trades']
-        backtest.equity_curve = results['equity_curve']
+        backtest.total_return = safe_total_return
+        backtest.sharpe_ratio = safe_sharpe
+        backtest.max_drawdown = safe_drawdown
+        backtest.win_rate = safe_win_rate
+        backtest.total_trades = int(results['total_trades'])
+        backtest.equity_curve = safe_equity_curve
         
         # 保存交易记录
         from app.models import Trade
         for trade_data in results['trades']:
+            d = _to_serializable(trade_data)
+            # entry_date / exit_date 需要 date 对象写入 Date 列
+            entry_d = trade_data['entry_date']
+            exit_d  = trade_data['exit_date']
+            if isinstance(entry_d, str):
+                entry_d = date.fromisoformat(entry_d[:10])
+            if isinstance(exit_d, str):
+                exit_d = date.fromisoformat(exit_d[:10])
             trade = Trade(
                 backtest_id=backtest_id,
-                entry_date=datetime.fromisoformat(trade_data['entry_date'].isoformat()) if hasattr(trade_data['entry_date'], 'isoformat') else trade_data['entry_date'],
-                exit_date=datetime.fromisoformat(trade_data['exit_date'].isoformat()) if hasattr(trade_data['exit_date'], 'isoformat') else trade_data['exit_date'],
-                entry_price=trade_data['entry_price'],
-                exit_price=trade_data['exit_price'],
-                pnl=trade_data['pnl'],
-                pnl_pct=trade_data['pnl_pct'],
-                legs=trade_data['legs'],
-                close_type=trade_data['close_type']
+                entry_date=entry_d,
+                exit_date=exit_d,
+                entry_price=d['entry_price'],
+                exit_price=d['exit_price'],
+                pnl=d['pnl'],
+                pnl_pct=d['pnl_pct'],
+                legs=d['legs'],
+                close_type=d['close_type']
             )
             db.add(trade)
         
@@ -118,19 +161,19 @@ def run_backtest_task(self, backtest_id: str):
                 "backtest_id": backtest_id,
                 "status": "completed",
                 "progress": 100,
-                "message": f"回测完成: 总收益 {results['total_return']:.2%}",
-                "total_return": results['total_return'],
-                "sharpe_ratio": results['sharpe_ratio']
+                "message": f"回测完成: 总收益 {safe_total_return:.2%}",
+                "total_return": safe_total_return,
+                "sharpe_ratio": safe_sharpe,
             })
         )
         
-        log.info(f"回测任务完成: {backtest_id}, 总收益: {results['total_return']:.2%}")
+        log.info(f"回测任务完成: {backtest_id}, 总收益: {safe_total_return:.2%}")
         
         return {
             "status": "completed",
             "backtest_id": backtest_id,
-            "total_return": results['total_return'],
-            "sharpe_ratio": results['sharpe_ratio']
+            "total_return": safe_total_return,
+            "sharpe_ratio": safe_sharpe,
         }
         
     except Exception as exc:

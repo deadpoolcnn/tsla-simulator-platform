@@ -50,7 +50,7 @@ class BacktestEngine:
         self,
         start_date: date,
         end_date: date,
-        progress_callback: Optional[Callable[[int, str, Dict], None]] = None
+        progress_callback: Optional[Callable[..., None]] = None
     ) -> Dict[str, Any]:
         """
         执行回测
@@ -88,11 +88,9 @@ class BacktestEngine:
                 progress_callback(
                     progress,
                     f"Processing {sim_date}",
-                    {
-                        'current_date': sim_date.isoformat(),
-                        'current_capital': self.tracker.get_total_equity(),
-                        'open_positions': len(self.tracker.open_positions)
-                    }
+                    current_date=sim_date.isoformat(),
+                    current_capital=self.tracker.get_total_equity(),
+                    open_positions=len(self.tracker.open_positions)
                 )
             
             # 执行单日回测

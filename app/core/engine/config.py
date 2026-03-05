@@ -3,7 +3,7 @@
 
 将原有的 Python 常量改为 Pydantic 模型，支持从 API 请求动态配置
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Tuple, Optional, Dict
 
 
@@ -122,6 +122,28 @@ class SimulationConfig(BaseModel):
     vector_score_min_train: int = 100
     vector_score_threshold_quantile: float = 0.0
     
+    @model_validator(mode='before')
+    @classmethod
+    def remap_api_leg_keys(cls, values: Dict) -> Dict:
+        """
+        将 API 层的短键名映射到引擎的完整键名。
+        例如: leg1_call -> tmpl_c_leg1_call
+        这样前端/API 传参无需加 tmpl_c_ 前缀。
+        """
+        if not isinstance(values, dict):
+            return values
+        leg_map = {
+            'leg1_call':    'tmpl_c_leg1_call',
+            'leg2_mid_buy': 'tmpl_c_leg2_mid_buy',
+            'leg3_mid_sell': 'tmpl_c_leg3_mid_sell',
+            'leg4_far_buy': 'tmpl_c_leg4_far_buy',
+            'leg5_far_sell': 'tmpl_c_leg5_far_sell',
+        }
+        for api_key, sim_key in leg_map.items():
+            if api_key in values:
+                values[sim_key] = values.pop(api_key)
+        return values
+
     def get_tp_sl(self, template: str) -> Tuple[float, float]:
         """获取指定模板的止盈止损比例"""
         mapping = {
