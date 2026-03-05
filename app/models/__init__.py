@@ -1,13 +1,18 @@
 """
 SQLAlchemy 数据库模型
 """
-from sqlalchemy import Column, String, DateTime, Float, Integer, JSON, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, Float, Integer, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import Base
+
+
+def _utcnow():
+    """UTC 时间，兼容 Python 3.12+"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Backtest(Base):
@@ -38,7 +43,7 @@ class Backtest(Base):
     equity_curve = Column(JSON)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     

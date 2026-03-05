@@ -75,31 +75,33 @@ async def get_progress_stream(backtest_id: UUID):
     """SSE 实时推送回测进度"""
     async def event_generator():
         from app.config import settings
-        import redis
-        
-        r = redis.from_url(settings.REDIS_URL)
+        import redis.asyncio as aioredis
+
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         channel = f"backtest:{backtest_id}:progress"
         pubsub = r.pubsub()
-        pubsub.subscribe(channel)
-        
+        await pubsub.subscribe(channel)
+
         try:
             while True:
-                message = pubsub.get_message(timeout=1)
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message and message["type"] == "message":
                     data = json.loads(message["data"])
                     yield f"data: {json.dumps(data)}\n\n"
-                    
+
                     # 如果完成或失败，结束流
                     if data.get("status") in ["completed", "failed"]:
                         break
-                        
+
                 await asyncio.sleep(0.1)
         finally:
-            pubsub.unsubscribe()
-    
+            await pubsub.unsubscribe()
+            await r.aclose()
+
     return StreamingResponse(
         event_generator(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
 
 

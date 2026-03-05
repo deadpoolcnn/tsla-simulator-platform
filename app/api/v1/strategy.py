@@ -93,4 +93,4 @@ async def get_config_schema():
 @router.get("/strategies/default-config")
 async def get_default_config():
     """获取默认策略配置"""
-    return StrategyConfig().dict()
+    return StrategyConfig().model_dump()

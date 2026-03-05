@@ -3,7 +3,7 @@
 """
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.celery_app import celery_app
@@ -35,7 +35,7 @@ def run_backtest_task(self, backtest_id: str):
         
         # 更新状态为运行中
         backtest.status = BacktestStatus.RUNNING
-        backtest.started_at = datetime.utcnow()
+        backtest.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         
         log.info(f"开始回测任务: {backtest_id}")
@@ -85,7 +85,7 @@ def run_backtest_task(self, backtest_id: str):
         
         # 5. 保存结果到数据库
         backtest.status = BacktestStatus.COMPLETED
-        backtest.completed_at = datetime.utcnow()
+        backtest.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         backtest.total_return = results['total_return']
         backtest.sharpe_ratio = results['sharpe_ratio']
         backtest.max_drawdown = results['max_drawdown']
@@ -135,12 +135,13 @@ def run_backtest_task(self, backtest_id: str):
         
     except Exception as exc:
         log.error(f"回测任务失败: {backtest_id}, 错误: {exc}")
-        
+
         # 更新失败状态
-        backtest.status = BacktestStatus.FAILED
-        backtest.error_message = str(exc)
-        backtest.completed_at = datetime.utcnow()
-        db.commit()
+        if backtest:
+            backtest.status = BacktestStatus.FAILED
+            backtest.error_message = str(exc)
+            backtest.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
         
         # 发布失败消息
         redis_client.publish(
@@ -158,3 +159,4 @@ def run_backtest_task(self, backtest_id: str):
         
     finally:
         db.close()
+        redis_client.close()

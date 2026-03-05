@@ -21,7 +21,7 @@ class BacktestService:
             symbols=data.symbols,
             start_date=data.start_date,
             end_date=data.end_date,
-            strategy_config=data.strategy_config.dict(),
+            strategy_config=data.strategy_config.model_dump(),
             initial_capital=data.strategy_config.initial_capital
         )
         self.db.add(backtest)
