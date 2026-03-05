@@ -1,6 +1,7 @@
 """
 FastAPI 主入口
 """
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -9,11 +10,18 @@ from app.database import engine, Base
 from app.api.v1 import backtest, strategy, data, report
 from app.config import settings
 
+log = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时创建表
-    Base.metadata.create_all(bind=engine)
+    # 启动时尝试创建数据库表，DB 不可达时仅警告不崩溃
+    try:
+        Base.metadata.create_all(bind=engine)
+        log.info("Database tables ready")
+    except Exception as e:
+        log.warning(f"Database not available at startup: {e}")
+        log.warning("Endpoints requiring DB will fail until the database is reachable.")
     yield
     # 关闭时清理
 

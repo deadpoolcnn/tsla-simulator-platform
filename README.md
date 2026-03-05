@@ -55,7 +55,7 @@ cp .env.example .env
 Key variables in `.env`:
 
 ```dotenv
-DATABASE_URL=postgresql://tsla_user:tsla_pass@localhost:5432/tsla_simulator
+DATABASE_URL=postgresql://tsla_user:tsla_pass@localhost:5433/tsla_simulator
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
@@ -88,10 +88,10 @@ pip install -r requirements.txt
 
 ```bash
 # From the project root (with .venv active)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-API docs are available at <http://localhost:8000/docs>
+API docs are available at <http://localhost:8001/docs>
 
 ### 5 — Run the Celery worker
 
@@ -101,15 +101,7 @@ Open a second terminal (with `.venv` active):
 celery -A app.celery_app worker --loglevel=info --concurrency=2
 ```
 
-### 6 — Run the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend is served at <http://localhost:5173>
+> The frontend is maintained in a separate repository.
 
 ---
 
@@ -123,11 +115,10 @@ docker-compose up -d
 
 | Service | URL |
 |---------|-----|
-| FastAPI backend | <http://localhost:8000> |
-| API docs (Swagger) | <http://localhost:8000/docs> |
-| Frontend | <http://localhost:5173> |
-| PostgreSQL | `localhost:5432` |
-| Redis | `localhost:6379` |
+| FastAPI backend | <http://localhost:8001> |
+| API docs (Swagger) | <http://localhost:8001/docs> |
+| PostgreSQL | `localhost:5433` |
+| Redis | `localhost:6380` |
 
 View logs:
 

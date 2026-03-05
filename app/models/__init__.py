@@ -76,7 +76,7 @@ class Trade(Base):
     # 关闭类型
     close_type = Column(String(20))  # trigger, expire, manual
     
-    # 额外元数据
-    metadata = Column(JSON)
-    
+    # 额外元数据（列名保留 "metadata"，Python 属性用 extra_data 避免与 SQLAlchemy 保留字冲突）
+    extra_data = Column("metadata", JSON)
+
     backtest = relationship("Backtest", back_populates="trades")
